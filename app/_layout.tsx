@@ -1,29 +1,25 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
-
-import { useColorScheme } from '@/hooks/useColorScheme';
+// Expo Router version — place these two files under the `app/` directory
+// 1) app/_layout.tsx
+import React from "react";
+import { Stack } from "expo-router";
+import { useColorScheme, Platform } from "react-native";
+import { DarkTheme, ThemeProvider } from "@react-navigation/native";
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-  const [loaded] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-  });
-
-  if (!loaded) {
-    // Async font loading only occurs in development.
-    return null;
-  }
-
+  // Force dark theme; if you prefer to follow system, swap to const scheme = useColorScheme();
+  const scheme: "dark" = "dark";
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-      <StatusBar style="auto" />
+    <ThemeProvider value={DarkTheme}>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: Platform.select({
+            ios: "default",
+            android: "fade_from_bottom",
+          }),
+          contentStyle: { backgroundColor: "#0B0F14" },
+        }}
+      />
     </ThemeProvider>
   );
 }
