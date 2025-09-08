@@ -1,5 +1,6 @@
 // 2) app/index.tsx
 import { Ionicons } from "@expo/vector-icons";
+import { Audio } from "expo-av";
 import * as Haptics from "expo-haptics";
 import React, {
   useCallback,
@@ -18,13 +19,12 @@ import {
   View,
 } from "react-native";
 import Svg, { Circle } from "react-native-svg";
-// Optional audio: expo-av + add ./assets/beep.mp3
-// import { Audio } from 'expo-av';
-// const BEEP = require('../assets/beep.mp3');
+const countdownBeep = require("../assets/countdown-beep.mp3");
+const finalBeep = require("../assets/final-beep.mp3");
 
 export default function Index() {
-  const [countdownSec, setCountdownSec] = useState("10");
-  const [maxWaitSec, setMaxWaitSec] = useState("5");
+  const [countdownSec, setCountdownSec] = useState("3");
+  const [maxWaitSec, setMaxWaitSec] = useState("2");
 
   const [phase, setPhase] = useState<"idle" | "countdown" | "waiting">("idle");
   const [paused, setPaused] = useState(false);
@@ -88,15 +88,19 @@ export default function Index() {
             await Haptics.notificationAsync(
               Haptics.NotificationFeedbackType.Success
             );
-          } catch {}
-          // Optional audio
-          // try {
-          //   const { sound } = await Audio.Sound.createAsync(BEEP);
-          //   await sound.playAsync();
-          //   sound.setOnPlaybackStatusUpdate((status) => {
-          //     if (!status.isLoaded || status.didJustFinish) sound.unloadAsync();
-          //   });
-          // } catch {}
+            // Play sound
+            const { sound } = await Audio.Sound.createAsync(finalBeep);
+            await sound.playAsync();
+
+            // Auto-unload when finished
+            sound.setOnPlaybackStatusUpdate((status) => {
+              if (!status.isLoaded || status.didJustFinish) {
+                sound.unloadAsync();
+              }
+            });
+          } catch (e) {
+            console.warn("Beep error", e);
+          }
           setPhase("idle");
         }, randomDelay);
       }
@@ -142,7 +146,19 @@ export default function Index() {
                 await Haptics.notificationAsync(
                   Haptics.NotificationFeedbackType.Success
                 );
-              } catch {}
+                // Play sound
+                const { sound } = await Audio.Sound.createAsync(finalBeep);
+                await sound.playAsync();
+
+                // Auto-unload when finished
+                sound.setOnPlaybackStatusUpdate((status) => {
+                  if (!status.isLoaded || status.didJustFinish) {
+                    sound.unloadAsync();
+                  }
+                });
+              } catch (e) {
+                console.warn("Beep error", e);
+              }
               setPhase("idle");
             }, randomDelay);
           }
@@ -164,6 +180,38 @@ export default function Index() {
   }, [remainingMs, totalCountdownMs]);
 
   const secondsLeft = Math.ceil(remainingMs / 1000);
+
+  const tickSoundRef = useRef<Audio.Sound | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const { sound } = await Audio.Sound.createAsync(countdownBeep);
+      if (mounted) tickSoundRef.current = sound;
+    })();
+    return () => {
+      mounted = false;
+      if (tickSoundRef.current) {
+        tickSoundRef.current.unloadAsync();
+        tickSoundRef.current = null;
+      }
+    };
+  }, []);
+
+  const lastSecondRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (phase === "countdown") {
+      const sec = Math.ceil(remainingMs / 1000);
+      if (lastSecondRef.current !== sec) {
+        lastSecondRef.current = sec;
+        // Play tick if not the very first value
+        if (tickSoundRef.current && sec > 0) {
+          tickSoundRef.current.replayAsync();
+        }
+      }
+    }
+  }, [remainingMs, phase]);
 
   return (
     <SafeAreaView style={styles.root}>
