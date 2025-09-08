@@ -1,4 +1,6 @@
 // 2) app/index.tsx
+import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import React, {
   useCallback,
   useEffect,
@@ -7,16 +9,14 @@ import React, {
   useState,
 } from "react";
 import {
-  SafeAreaView,
-  View,
-  Text,
-  TouchableOpacity,
-  TextInput,
-  StyleSheet,
   Platform,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import * as Haptics from "expo-haptics";
 import Svg, { Circle } from "react-native-svg";
 // Optional audio: expo-av + add ./assets/beep.mp3
 // import { Audio } from 'expo-av';
@@ -39,8 +39,8 @@ export default function Index() {
   );
 
   const [remainingMs, setRemainingMs] = useState(totalCountdownMs);
-  const waitTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const waitTimeoutRef = useRef<number | null>(null);
+  const intervalRef = useRef<number | null>(null);
   const resumeBaseRef = useRef<{
     remainingAtPause: number;
     pausedAt: number;
@@ -51,11 +51,11 @@ export default function Index() {
   }, [totalCountdownMs, phase]);
 
   const clearTimers = useCallback(() => {
-    if (intervalRef.current) {
+    if (intervalRef.current !== null) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-    if (waitTimeoutRef.current) {
+    if (waitTimeoutRef.current !== null) {
       clearTimeout(waitTimeoutRef.current);
       waitTimeoutRef.current = null;
     }
@@ -182,19 +182,20 @@ export default function Index() {
               cx={size / 2}
               cy={size / 2}
               r={radius}
-              stroke="#2A2F35"
+              stroke="#42caf4ff"
               strokeWidth={stroke}
               fill="none"
             />
+            {/* #6EE7B7 */}
             <Circle
               cx={size / 2}
               cy={size / 2}
               r={radius}
-              stroke="#6EE7B7"
-              strokeWidth={stroke}
-              strokeLinecap="round"
+              stroke="#2A2F35"
+              strokeWidth={stroke + 0.8}
+              strokeLinecap="butt"
               strokeDasharray={`${circumference} ${circumference}`}
-              strokeDashoffset={circumference * (1 - progress)}
+              strokeDashoffset={circumference * (1 - progress) * -1}
               fill="none"
               rotation="-90"
               origin={`${size / 2}, ${size / 2}`}
@@ -334,7 +335,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#1f2937",
   },
-  label: { color: "#A7F3D0", marginBottom: 8, fontWeight: "600" },
+  label: { color: "#E5E7EB", marginBottom: 8, fontWeight: "600" },
   input: {
     color: "#E5E7EB",
     backgroundColor: "#111827",
