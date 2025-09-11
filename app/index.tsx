@@ -1,6 +1,6 @@
 // 2) app/index.tsx
 import { Ionicons } from "@expo/vector-icons";
-import { Audio } from "expo-av";
+import { Audio, AVPlaybackStatus } from "expo-av";
 import * as Haptics from "expo-haptics";
 import React, {
   useCallback,
@@ -10,6 +10,8 @@ import React, {
   useState,
 } from "react";
 import {
+  Animated,
+  Easing,
   Platform,
   SafeAreaView,
   StyleSheet,
@@ -46,6 +48,19 @@ export default function Index() {
     pausedAt: number;
   } | null>(null);
 
+  // Animated UI toggle between idle <-> running
+  const uiMode = useRef(new Animated.Value(0)).current; // 0 = idle, 1 = running
+  useEffect(() => {
+    const toValue = phase === "idle" ? 0 : 1;
+    Animated.timing(uiMode, {
+      toValue,
+      duration: 280,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [phase, uiMode]);
+
+  // reset remaining when total changes (only while idle)
   useEffect(() => {
     if (phase === "idle") setRemainingMs(totalCountdownMs);
   }, [totalCountdownMs, phase]);
@@ -71,12 +86,12 @@ export default function Index() {
 
     const startAt = Date.now();
     intervalRef.current = setInterval(() => {
-      if (paused) return;
+      // pause is handled by toggling and re-baselining; no need to branch here
       const elapsed = Date.now() - startAt;
       const nextRemaining = Math.max(0, totalCountdownMs - elapsed);
       setRemainingMs(nextRemaining);
       if (nextRemaining <= 0) {
-        if (intervalRef.current) {
+        if (intervalRef.current !== null) {
           clearInterval(intervalRef.current);
           intervalRef.current = null;
         }
@@ -88,15 +103,11 @@ export default function Index() {
             await Haptics.notificationAsync(
               Haptics.NotificationFeedbackType.Success
             );
-            // Play sound
             const { sound } = await Audio.Sound.createAsync(finalBeep);
             await sound.playAsync();
-
-            // Auto-unload when finished
-            sound.setOnPlaybackStatusUpdate((status) => {
-              if (!status.isLoaded || status.didJustFinish) {
-                sound.unloadAsync();
-              }
+            sound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
+              if (!status.isLoaded) return;
+              if (status.didJustFinish) sound.unloadAsync();
             });
           } catch (e) {
             console.warn("Beep error", e);
@@ -105,7 +116,7 @@ export default function Index() {
         }, randomDelay);
       }
     }, 50);
-  }, [clearTimers, totalCountdownMs, maxWaitMs, paused]);
+  }, [clearTimers, totalCountdownMs, maxWaitMs]);
 
   const stop = useCallback(() => {
     clearTimers();
@@ -117,12 +128,11 @@ export default function Index() {
   const togglePause = useCallback(() => {
     if (phase !== "countdown") return;
     setPaused((p) => {
-      const now = Date.now();
       if (!p) {
         // going into pause
         resumeBaseRef.current = {
           remainingAtPause: remainingMs,
-          pausedAt: now,
+          pausedAt: Date.now(),
         };
       } else if (resumeBaseRef.current) {
         // resuming: re-baseline the countdown by restarting with remaining time
@@ -134,7 +144,7 @@ export default function Index() {
           const nextRemaining = Math.max(0, remainingAtPause - elapsed);
           setRemainingMs(nextRemaining);
           if (nextRemaining <= 0) {
-            if (intervalRef.current) {
+            if (intervalRef.current !== null) {
               clearInterval(intervalRef.current);
               intervalRef.current = null;
             }
@@ -146,15 +156,11 @@ export default function Index() {
                 await Haptics.notificationAsync(
                   Haptics.NotificationFeedbackType.Success
                 );
-                // Play sound
                 const { sound } = await Audio.Sound.createAsync(finalBeep);
                 await sound.playAsync();
-
-                // Auto-unload when finished
-                sound.setOnPlaybackStatusUpdate((status) => {
-                  if (!status.isLoaded || status.didJustFinish) {
-                    sound.unloadAsync();
-                  }
+                sound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
+                  if (!status.isLoaded) return;
+                  if (status.didJustFinish) sound.unloadAsync();
                 });
               } catch (e) {
                 console.warn("Beep error", e);
@@ -181,8 +187,8 @@ export default function Index() {
 
   const secondsLeft = Math.ceil(remainingMs / 1000);
 
+  // Preload tick sound once
   const tickSoundRef = useRef<Audio.Sound | null>(null);
-
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -198,14 +204,13 @@ export default function Index() {
     };
   }, []);
 
+  // Play a tick each time the displayed second changes during countdown
   const lastSecondRef = useRef<number | null>(null);
-
   useEffect(() => {
     if (phase === "countdown") {
       const sec = Math.ceil(remainingMs / 1000);
       if (lastSecondRef.current !== sec) {
         lastSecondRef.current = sec;
-        // Play tick if not the very first value
         if (tickSoundRef.current && sec > 0) {
           tickSoundRef.current.replayAsync();
         }
@@ -213,62 +218,101 @@ export default function Index() {
     }
   }, [remainingMs, phase]);
 
+  // Animated styles
+  const idleOpacity = uiMode.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0],
+  });
+  const idleTranslate = uiMode.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 12],
+  });
+  const runOpacity = uiMode.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-1, 1],
+  });
+  const runTranslate = uiMode.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-50, 120],
+  });
+  const circleScale = uiMode.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.2],
+  });
+  const circleTranslate = uiMode.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 100], // 0 in idle, +24px when timer is active
+  });
+
   return (
     <SafeAreaView style={styles.root}>
       <View style={styles.container}>
-        {/* Hourglass badge 
-        <View style={styles.logoWrap}>
-          <View style={styles.logoCircle}>
-            <Ionicons name="hourglass" size={42} color="#C7F9CC" />
-          </View>
-        </View>*/}
-
-        {/* Circular progress */}
+        {/* Circular progress with animated scale */}
         <View style={styles.circleWrap}>
-          <Svg width={size} height={size}>
-            <Circle
-              cx={size / 2}
-              cy={size / 2}
-              r={radius}
-              stroke="#42caf4ff"
-              strokeWidth={stroke}
-              fill="none"
-            />
-            {/* #6EE7B7 */}
-            <Circle
-              cx={size / 2}
-              cy={size / 2}
-              r={radius}
-              stroke="#2A2F35"
-              strokeWidth={stroke + 0.8}
-              strokeLinecap="butt"
-              strokeDasharray={`${circumference} ${circumference}`}
-              strokeDashoffset={circumference * (1 - progress) * -1}
-              fill="none"
-              rotation="-90"
-              origin={`${size / 2}, ${size / 2}`}
-            />
-          </Svg>
-          <View style={styles.centerLabel}>
-            {phase === "waiting" ? (
-              <Text style={styles.countText}>…</Text>
-            ) : (
-              <Text style={styles.countText}>
-                {isFinite(secondsLeft) ? secondsLeft : 0}
+          <Animated.View
+            style={[
+              styles.circleWrap,
+              {
+                transform: [
+                  { translateY: circleTranslate },
+                  { scale: circleScale },
+                ],
+              },
+            ]}
+          >
+            <Svg width={size} height={size}>
+              <Circle
+                cx={size / 2}
+                cy={size / 2}
+                r={radius}
+                stroke="#42caf4ff"
+                strokeWidth={stroke}
+                fill="none"
+              />
+              {/* #6EE7B7 */}
+              <Circle
+                cx={size / 2}
+                cy={size / 2}
+                r={radius}
+                stroke="#2A2F35"
+                strokeWidth={stroke + 0.8}
+                strokeLinecap="butt"
+                strokeDasharray={`${circumference} ${circumference}`}
+                strokeDashoffset={circumference * (1 - progress) * -1}
+                fill="none"
+                rotation="-90"
+                origin={`${size / 2}, ${size / 2}`}
+              />
+            </Svg>
+            <View style={styles.centerLabel}>
+              {phase === "waiting" ? (
+                <Text style={styles.countText}>…</Text>
+              ) : (
+                <Text style={styles.countText}>
+                  {isFinite(secondsLeft) ? secondsLeft : 0}
+                </Text>
+              )}
+              <Text style={styles.subText}>
+                {phase === "idle" && "Ready"}
+                {phase === "countdown" && (paused ? "Paused" : "Counting")}
+                {phase === "waiting" && "Waiting…"}
               </Text>
-            )}
-            <Text style={styles.subText}>
-              {phase === "idle" && "Ready"}
-              {phase === "countdown" && (paused ? "Paused" : "Counting")}
-              {phase === "waiting" && "Waiting…"}
-            </Text>
-          </View>
+            </View>
+          </Animated.View>
         </View>
 
-        {phase === "idle" ? (
-          <>
+        <View style={styles.controlsHost}>
+          {/* IDLE CONFIG (kept mounted; fades/slides out) */}
+          <Animated.View
+            pointerEvents={phase === "idle" ? "auto" : "none"}
+            style={{
+              ...(StyleSheet.absoluteFill as any),
+              opacity: idleOpacity,
+              transform: [{ translateY: idleTranslate }],
+            }}
+          >
             <View style={styles.configWrap}>
-              <View style={styles.inputRow}>
+              <View className="inputRow" style={styles.inputRow}>
                 <Text style={styles.label}>Countdown (sec)</Text>
                 <TextInput
                   style={styles.input}
@@ -298,47 +342,63 @@ export default function Index() {
                   placeholderTextColor="#6B7280"
                 />
               </View>
+              <Text style={styles.note}>
+                Tip: set Max wait to 0 for an immediate beep at the end.
+              </Text>
             </View>
-            <TouchableOpacity
-              accessibilityRole="button"
-              onPress={start}
-              style={styles.startBtn}
-            >
-              <Ionicons name="play" size={22} color="#052e16" />
-              <Text style={styles.startText}>Start</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <View style={styles.runControls}>
-            <TouchableOpacity
-              onPress={stop}
-              style={[styles.ctrlBtn, styles.stopBtn]}
-            >
-              <Ionicons name="stop" size={18} color="#fecaca" />
-              <Text style={styles.ctrlText}>Stop</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              disabled={phase !== "countdown"}
-              onPress={togglePause}
-              style={[
-                styles.ctrlBtn,
-                styles.pauseBtn,
-                phase !== "countdown" && { opacity: 0.5 },
-              ]}
-            >
-              <Ionicons
-                name={paused ? "play" : "pause"}
-                size={18}
-                color="#d1fae5"
-              />
-              <Text style={styles.ctrlText}>{paused ? "Resume" : "Pause"}</Text>
-            </TouchableOpacity>
-          </View>
-        )}
 
-        <Text style={styles.note}>
-          Tip: set Max wait to 0 for an immediate beep at the end.
-        </Text>
+            <View style={{ alignItems: "center", marginTop: 16 }}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                onPress={start}
+                style={[styles.ctrlBtn, styles.startBtn]}
+              >
+                <Ionicons name="play" size={18} color="#052e16" />
+                <Text style={styles.startText}>Start</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+
+          {/* RUN CONTROLS (kept mounted; fade/slide in) */}
+          <Animated.View
+            pointerEvents={phase !== "idle" ? "auto" : "none"}
+            style={{
+              ...(StyleSheet.absoluteFill as any),
+              opacity: runOpacity,
+              transform: [{ translateY: runTranslate }],
+              alignItems: "center",
+              justifyContent: "flex-start",
+            }}
+          >
+            <View style={styles.runControls}>
+              <TouchableOpacity
+                onPress={stop}
+                style={[styles.ctrlBtn, styles.stopBtn]}
+              >
+                <Ionicons name="stop" size={18} color="#fecaca" />
+                <Text style={styles.ctrlText}>Stop</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                disabled={phase !== "countdown"}
+                onPress={togglePause}
+                style={[
+                  styles.ctrlBtn,
+                  styles.pauseBtn,
+                  phase !== "countdown" && { opacity: 0.5 },
+                ]}
+              >
+                <Ionicons
+                  name={paused ? "play" : "pause"}
+                  size={18}
+                  color="#d1fae5"
+                />
+                <Text style={styles.ctrlText}>
+                  {paused ? "Resume" : "Pause"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -349,8 +409,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 24,
+    paddingTop: 100,
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start",
   },
   logoWrap: { marginBottom: 12 },
   logoCircle: {
@@ -394,29 +455,27 @@ const styles = StyleSheet.create({
     borderColor: "#1f2937",
     fontVariant: ["tabular-nums"],
   },
-  startBtn: {
-    marginTop: 18,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: "#34D399",
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 9999,
-    shadowColor: "#34D399",
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
+  controlsHost: {
+    position: "relative",
+    width: "100%",
+    minHeight: 160,
+    marginTop: 8,
   },
-  startText: { color: "#052e16", fontWeight: "800", fontSize: 16 },
-  runControls: { flexDirection: "row", gap: 12, marginTop: 10 },
+  runControls: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 10,
+    justifyContent: "center",
+  },
   ctrlBtn: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center", // center content
     gap: 8,
     paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20, // uniform padding
     borderRadius: 9999,
+    width: 110,
   },
   stopBtn: {
     backgroundColor: "#1f2937",
@@ -424,6 +483,9 @@ const styles = StyleSheet.create({
     borderColor: "#4b5563",
   },
   pauseBtn: { backgroundColor: "#065f46" },
+  startBtn: { backgroundColor: "#34D399" },
+
   ctrlText: { color: "#E5E7EB", fontWeight: "700" },
+  startText: { color: "#052e16", fontWeight: "700" },
   note: { color: "#6B7280", marginTop: 16 },
 });
