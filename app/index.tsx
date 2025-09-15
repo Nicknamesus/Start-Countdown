@@ -129,7 +129,8 @@ export default function Index() {
     if (phase !== "countdown") return;
     setPaused((p) => {
       if (!p) {
-        // going into pause
+        // going into pause — freeze the timer
+        clearTimers(); // 👈 stop the running interval so remainingMs stops changing
         resumeBaseRef.current = {
           remainingAtPause: remainingMs,
           pausedAt: Date.now(),
