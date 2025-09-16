@@ -1,14 +1,8 @@
 // 2) app/index.tsx
 import { Ionicons } from "@expo/vector-icons";
-import { Audio, AVPlaybackStatus } from "expo-av";
+import { setAudioModeAsync, useAudioPlayer } from "expo-audio";
 import * as Haptics from "expo-haptics";
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Easing,
@@ -20,7 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import Svg, { Circle } from "react-native-svg";
+import Svg, { Circle, Defs, LinearGradient, Stop } from "react-native-svg";
 const countdownBeep = require("../assets/countdown-beep.mp3");
 const finalBeep = require("../assets/final-beep.mp3");
 
@@ -47,6 +41,14 @@ export default function Index() {
     remainingAtPause: number;
     pausedAt: number;
   } | null>(null);
+
+  useEffect(() => {
+    setAudioModeAsync({
+      playsInSilentMode: true,
+    });
+  }, []);
+  const tickPlayer = useAudioPlayer(countdownBeep); // short tick each second
+  const finalPlayer = useAudioPlayer(finalBeep); // 2s higher-pitched final beep
 
   // Animated UI toggle between idle <-> running
   const uiMode = useRef(new Animated.Value(0)).current; // 0 = idle, 1 = running
@@ -103,12 +105,8 @@ export default function Index() {
             await Haptics.notificationAsync(
               Haptics.NotificationFeedbackType.Success
             );
-            const { sound } = await Audio.Sound.createAsync(finalBeep);
-            await sound.playAsync();
-            sound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
-              if (!status.isLoaded) return;
-              if (status.didJustFinish) sound.unloadAsync();
-            });
+            finalPlayer.seekTo(0);
+            finalPlayer.play();
           } catch (e) {
             console.warn("Beep error", e);
           }
@@ -157,12 +155,8 @@ export default function Index() {
                 await Haptics.notificationAsync(
                   Haptics.NotificationFeedbackType.Success
                 );
-                const { sound } = await Audio.Sound.createAsync(finalBeep);
-                await sound.playAsync();
-                sound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
-                  if (!status.isLoaded) return;
-                  if (status.didJustFinish) sound.unloadAsync();
-                });
+                finalPlayer.seekTo(0);
+                finalPlayer.play();
               } catch (e) {
                 console.warn("Beep error", e);
               }
@@ -188,21 +182,10 @@ export default function Index() {
 
   const secondsLeft = Math.ceil(remainingMs / 1000);
 
-  // Preload tick sound once
-  const tickSoundRef = useRef<Audio.Sound | null>(null);
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      const { sound } = await Audio.Sound.createAsync(countdownBeep);
-      if (mounted) tickSoundRef.current = sound;
-    })();
-    return () => {
-      mounted = false;
-      if (tickSoundRef.current) {
-        tickSoundRef.current.unloadAsync();
-        tickSoundRef.current = null;
-      }
-    };
+    setAudioModeAsync({
+      playsInSilentMode: true,
+    });
   }, []);
 
   // Play a tick each time the displayed second changes during countdown
@@ -212,12 +195,13 @@ export default function Index() {
       const sec = Math.ceil(remainingMs / 1000);
       if (lastSecondRef.current !== sec) {
         lastSecondRef.current = sec;
-        if (tickSoundRef.current && sec > 0) {
-          tickSoundRef.current.replayAsync();
+        if (sec > 0) {
+          tickPlayer.seekTo(0);
+          tickPlayer.play();
         }
       }
     }
-  }, [remainingMs, phase]);
+  }, [remainingMs, phase, tickPlayer]);
 
   // Animated styles
   const idleOpacity = uiMode.interpolate({
@@ -262,11 +246,23 @@ export default function Index() {
             ]}
           >
             <Svg width={size} height={size}>
+              <Defs>
+                <LinearGradient
+                  id="progressGradient"
+                  x1="0%"
+                  y1="0%"
+                  x2="100%"
+                  y2="0%"
+                >
+                  <Stop offset="0%" stopColor="#9D7BFF" />
+                  <Stop offset="100%" stopColor="#6BA5FF" />
+                </LinearGradient>
+              </Defs>
               <Circle
                 cx={size / 2}
                 cy={size / 2}
                 r={radius}
-                stroke="#42caf4ff"
+                stroke={"url(#progressGradient)"}
                 strokeWidth={stroke}
                 fill="none"
               />

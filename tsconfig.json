@@ -1,12 +1,29 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true,
+    "jsx": "react-jsx",  // 👈 tells TS how to compile JSX
+    
+    "moduleResolution": "bundler",
+    "customConditions": ["react-native"],
+
+    "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "./*"
-      ]
-    }
+      "@/*": ["./*"]          // "@/components/button" -> "<root>/components/button"
+      // If you prefer "@/app/*" to mean the app folder instead, use:
+      // "@/*": ["./app/*"]
+    },
+
+    "target": "esnext",
+    "module": "esnext",
+    "allowJs": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+
+    "types": ["react", "react-native"]
   },
   "include": [
     "**/*.ts",
