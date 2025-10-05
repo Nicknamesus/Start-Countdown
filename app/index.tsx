@@ -6,14 +6,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Easing,
+  Keyboard,
+  KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import Svg, { Circle, Defs, LinearGradient, Stop } from "react-native-svg";
 const countdownBeep = require("../assets/audio/countdown-beep.wav");
 const finalBeep = require("../assets/audio/final-beep.wav");
@@ -229,175 +235,192 @@ export default function Index() {
     outputRange: [0, 100], // 0 in idle, +24px when timer is active
   });
 
+  const insets = useSafeAreaInsets();
+
   return (
-    <SafeAreaView style={styles.root}>
-      <View style={styles.container}>
-        {/* Circular progress with animated scale */}
-        <View style={styles.circleWrap}>
-          <Animated.View
-            style={[
-              styles.circleWrap,
-              {
-                transform: [
-                  { translateY: circleTranslate },
-                  { scale: circleScale },
-                ],
-              },
-            ]}
-          >
-            <Svg width={size} height={size}>
-              <Defs>
-                <LinearGradient
-                  id="progressGradient"
-                  x1="0%"
-                  y1="0%"
-                  x2="100%"
-                  y2="0%"
-                >
-                  <Stop offset="0%" stopColor="#9D7BFF" />
-                  <Stop offset="100%" stopColor="#6BA5FF" />
-                </LinearGradient>
-              </Defs>
-              <Circle
-                cx={size / 2}
-                cy={size / 2}
-                r={radius}
-                stroke={"url(#progressGradient)"}
-                strokeWidth={stroke}
-                fill="none"
-              />
-              {/* #6EE7B7 */}
-              <Circle
-                cx={size / 2}
-                cy={size / 2}
-                r={radius}
-                stroke="#2A2F35"
-                strokeWidth={stroke + 0.8}
-                strokeLinecap="butt"
-                strokeDasharray={`${circumference} ${circumference}`}
-                strokeDashoffset={circumference * (1 - progress) * -1}
-                fill="none"
-                rotation="-90"
-                origin={`${size / 2}, ${size / 2}`}
-              />
-            </Svg>
-            <View style={styles.centerLabel}>
-              {phase === "waiting" ? (
-                <Text style={styles.countText}>…</Text>
-              ) : (
-                <Text style={styles.countText}>
-                  {isFinite(secondsLeft) ? secondsLeft : 0}
-                </Text>
-              )}
-              <Text style={styles.subText}>
-                {phase === "idle" && "Ready"}
-                {phase === "countdown" && (paused ? "Paused" : "Counting")}
-                {phase === "waiting" && "Waiting…"}
-              </Text>
-            </View>
-          </Animated.View>
-        </View>
-
-        <View style={styles.controlsHost}>
-          {/* IDLE CONFIG (kept mounted; fades/slides out) */}
-          <Animated.View
-            pointerEvents={phase === "idle" ? "auto" : "none"}
-            style={{
-              ...(StyleSheet.absoluteFill as any),
-              opacity: idleOpacity,
-              transform: [{ translateY: idleTranslate }],
-            }}
-          >
-            <View style={styles.configWrap}>
-              <View className="inputRow" style={styles.inputRow}>
-                <Text style={styles.label}>Countdown (sec)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={countdownSec}
-                  onChangeText={(t) =>
-                    setCountdownSec(t.replace(/[^0-9.]/g, ""))
-                  }
-                  keyboardType={Platform.select({
-                    ios: "decimal-pad",
-                    android: "numeric",
-                  })}
-                  placeholder="10"
-                  placeholderTextColor="#6B7280"
-                />
-              </View>
-              <View style={styles.inputRow}>
-                <Text style={styles.label}>Max wait before beep (sec)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={maxWaitSec}
-                  onChangeText={(t) => setMaxWaitSec(t.replace(/[^0-9.]/g, ""))}
-                  keyboardType={Platform.select({
-                    ios: "decimal-pad",
-                    android: "numeric",
-                  })}
-                  placeholder="5"
-                  placeholderTextColor="#6B7280"
-                />
-              </View>
-              <Text style={styles.note}>
-                Tip: set Max wait to 0 for an immediate beep at the end.
-              </Text>
-            </View>
-
-            <View style={{ alignItems: "center", marginTop: 16 }}>
-              <TouchableOpacity
-                accessibilityRole="button"
-                onPress={start}
-                style={[styles.ctrlBtn, styles.startBtn]}
-              >
-                <Ionicons name="play" size={18} color="#052e16" />
-                <Text style={styles.startText}>Start</Text>
-              </TouchableOpacity>
-            </View>
-          </Animated.View>
-
-          {/* RUN CONTROLS (kept mounted; fade/slide in) */}
-          <Animated.View
-            pointerEvents={phase !== "idle" ? "auto" : "none"}
-            style={{
-              ...(StyleSheet.absoluteFill as any),
-              opacity: runOpacity,
-              transform: [{ translateY: runTranslate }],
-              alignItems: "center",
-              justifyContent: "flex-start",
-            }}
-          >
-            <View style={styles.runControls}>
-              <TouchableOpacity
-                onPress={stop}
-                style={[styles.ctrlBtn, styles.stopBtn]}
-              >
-                <Ionicons name="stop" size={18} color="#fecaca" />
-                <Text style={styles.ctrlText}>Stop</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                disabled={phase !== "countdown"}
-                onPress={togglePause}
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <SafeAreaView
+        edges={["bottom"]}
+        style={[
+          styles.root,
+          { paddingBottom: insets.bottom + 16, paddingTop: 12 },
+        ]}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.container}>
+            {/* Circular progress with animated scale */}
+            <View style={styles.circleWrap}>
+              <Animated.View
                 style={[
-                  styles.ctrlBtn,
-                  styles.pauseBtn,
-                  phase !== "countdown" && { opacity: 0.5 },
+                  styles.circleWrap,
+                  {
+                    transform: [
+                      { translateY: circleTranslate },
+                      { scale: circleScale },
+                    ],
+                  },
                 ]}
               >
-                <Ionicons
-                  name={paused ? "play" : "pause"}
-                  size={18}
-                  color="#d1fae5"
-                />
-                <Text style={styles.ctrlText}>
-                  {paused ? "Resume" : "Pause"}
-                </Text>
-              </TouchableOpacity>
+                <Svg width={size} height={size}>
+                  <Defs>
+                    <LinearGradient
+                      id="progressGradient"
+                      x1="0%"
+                      y1="0%"
+                      x2="100%"
+                      y2="0%"
+                    >
+                      <Stop offset="0%" stopColor="#9D7BFF" />
+                      <Stop offset="100%" stopColor="#6BA5FF" />
+                    </LinearGradient>
+                  </Defs>
+                  <Circle
+                    cx={size / 2}
+                    cy={size / 2}
+                    r={radius}
+                    stroke={"url(#progressGradient)"}
+                    strokeWidth={stroke}
+                    fill="none"
+                  />
+                  {/* #6EE7B7 */}
+                  <Circle
+                    cx={size / 2}
+                    cy={size / 2}
+                    r={radius}
+                    stroke="#2A2F35"
+                    strokeWidth={stroke + 0.8}
+                    strokeLinecap="butt"
+                    strokeDasharray={`${circumference} ${circumference}`}
+                    strokeDashoffset={circumference * (1 - progress) * -1}
+                    fill="none"
+                    rotation="-90"
+                    origin={`${size / 2}, ${size / 2}`}
+                  />
+                </Svg>
+                <View style={styles.centerLabel}>
+                  {phase === "waiting" ? (
+                    <Text style={styles.countText}>…</Text>
+                  ) : (
+                    <Text style={styles.countText}>
+                      {isFinite(secondsLeft) ? secondsLeft : 0}
+                    </Text>
+                  )}
+                  <Text style={styles.subText}>
+                    {phase === "idle" && "Ready"}
+                    {phase === "countdown" && (paused ? "Paused" : "Counting")}
+                    {phase === "waiting" && "Waiting…"}
+                  </Text>
+                </View>
+              </Animated.View>
             </View>
-          </Animated.View>
-        </View>
-      </View>
-    </SafeAreaView>
+
+            <View style={styles.controlsHost}>
+              {/* IDLE CONFIG (kept mounted; fades/slides out) */}
+              <Animated.View
+                pointerEvents={phase === "idle" ? "auto" : "none"}
+                style={{
+                  ...(StyleSheet.absoluteFill as any),
+                  opacity: idleOpacity,
+                  transform: [{ translateY: idleTranslate }],
+                }}
+              >
+                <View style={styles.configWrap}>
+                  <View className="inputRow" style={styles.inputRow}>
+                    <Text style={styles.label}>Countdown (sec)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={countdownSec}
+                      onChangeText={(t) =>
+                        setCountdownSec(t.replace(/[^0-9.]/g, ""))
+                      }
+                      keyboardType={Platform.select({
+                        ios: "decimal-pad",
+                        android: "numeric",
+                      })}
+                      placeholder="10"
+                      placeholderTextColor="#6B7280"
+                    />
+                  </View>
+                  <View style={styles.inputRow}>
+                    <Text style={styles.label}>Max wait before beep (sec)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={maxWaitSec}
+                      onChangeText={(t) =>
+                        setMaxWaitSec(t.replace(/[^0-9.]/g, ""))
+                      }
+                      keyboardType={Platform.select({
+                        ios: "decimal-pad",
+                        android: "numeric",
+                      })}
+                      placeholder="5"
+                      placeholderTextColor="#6B7280"
+                    />
+                  </View>
+                  <Text style={styles.note}>
+                    Tip: set Max wait to 0 for an immediate beep at the end.
+                  </Text>
+                </View>
+
+                <View style={{ alignItems: "center", marginTop: 16 }}>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    onPress={start}
+                    style={[styles.ctrlBtn, styles.startBtn]}
+                  >
+                    <Ionicons name="play" size={18} color="#052e16" />
+                    <Text style={styles.startText}>Start</Text>
+                  </TouchableOpacity>
+                </View>
+              </Animated.View>
+
+              {/* RUN CONTROLS (kept mounted; fade/slide in) */}
+              <Animated.View
+                pointerEvents={phase !== "idle" ? "auto" : "none"}
+                style={{
+                  ...(StyleSheet.absoluteFill as any),
+                  opacity: runOpacity,
+                  transform: [{ translateY: runTranslate }],
+                  alignItems: "center",
+                  justifyContent: "flex-start",
+                }}
+              >
+                <View style={styles.runControls}>
+                  <TouchableOpacity
+                    onPress={stop}
+                    style={[styles.ctrlBtn, styles.stopBtn]}
+                  >
+                    <Ionicons name="stop" size={18} color="#fecaca" />
+                    <Text style={styles.ctrlText}>Stop</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    disabled={phase !== "countdown"}
+                    onPress={togglePause}
+                    style={[
+                      styles.ctrlBtn,
+                      styles.pauseBtn,
+                      phase !== "countdown" && { opacity: 0.5 },
+                    ]}
+                  >
+                    <Ionicons
+                      name={paused ? "play" : "pause"}
+                      size={18}
+                      color="#d1fae5"
+                    />
+                    <Text style={styles.ctrlText}>
+                      {paused ? "Resume" : "Pause"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </Animated.View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </TouchableWithoutFeedback>
   );
 }
 
