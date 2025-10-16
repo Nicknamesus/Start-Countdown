@@ -21,7 +21,7 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, LinearGradient, Stop } from "react-native-svg";
-const countdownBeep = require("../assets/audio/countdown-beep.wav");
+const countdownBeep = require("../assets/audio/countdown-beep-new2.wav");
 const finalBeep = require("../assets/audio/final-beep.wav");
 
 export default function Index() {
