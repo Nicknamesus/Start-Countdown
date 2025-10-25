@@ -13,10 +13,16 @@
       "android": { "buildType": "apk" }
     },
     "production": {
+      "android": { "buildType": "app-bundle" },
       "autoIncrement": true
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {
+        "track": "production",
+        "releaseStatus": "completed"
+      }
+    }
   }
 }
